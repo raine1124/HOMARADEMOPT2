@@ -14,7 +14,7 @@ export class TreePointCloud {
             potentialPointsCount: params.potentialPointsCount || 150, // Number of potential interactive points
             activatedPointsCount: params.activatedPointsCount || 5, // Number of currently activated points
             activatedPointColor: new THREE.Color(params.activatedPointColor || 0xFF0000), // Red color for activated points
-            potentialPointColor: new THREE.Color(params.potentialPointColor || 0xFFFF00), // Yellow color for potential points
+            potentialPointColor: new THREE.Color(params.potentialPointColor || 0x00FF00), // Green color for potential points
             normalPointSize: params.normalPointSize || 0.03,
             interactivePointSize: params.interactivePointSize || 0.08,
             hoverPointSize: params.hoverPointSize || 0.12
@@ -31,13 +31,13 @@ export class TreePointCloud {
         this.hoveredPoint = null;
         this.hoverFrame = null;
         
-        // URLs for activated points - replace with your actual destinations
-        this.activatedPointURLs = [
-            'page1.html',
-            'page2.html',
-            'page3.html',
-            'page4.html',
-            'page5.html'
+        // URLs and usernames for activated points
+        this.activatedPointData = [
+            { url: 'page1.html', username: 'User1', frameContent: 'Whiteboard 1' },
+            { url: 'page2.html', username: 'User2', frameContent: 'Whiteboard 2' },
+            { url: 'page3.html', username: 'User3', frameContent: 'Whiteboard 3' },
+            { url: 'page4.html', username: 'User4', frameContent: 'Whiteboard 4' },
+            { url: 'page5.html', username: 'User5', frameContent: 'Whiteboard 5' }
         ];
         
         // Store information about interactive points
@@ -250,11 +250,15 @@ export class TreePointCloud {
             }
         }
         
-        // Create activated points
+                        // Create activated points
         activatedIndices.forEach((index, i) => {
             const point = this.potentialPoints[index];
             point.isActivated = true;
-            point.url = this.activatedPointURLs[i % this.activatedPointURLs.length];
+            const dataIndex = i % this.activatedPointData.length;
+            point.url = this.activatedPointData[dataIndex].url;
+            point.username = this.activatedPointData[dataIndex].username;
+            point.frameContent = this.activatedPointData[dataIndex].frameContent;
+            point.dataIndex = dataIndex;
             
             activatedVertices.push(
                 point.position.x,
@@ -318,7 +322,10 @@ export class TreePointCloud {
             activatedPointCloud.userData[`point_${i}`] = {
                 index: pointData.id,
                 isActivated: true,
-                url: pointData.url
+                url: pointData.url,
+                username: pointData.username,
+                frameContent: pointData.frameContent,
+                dataIndex: pointData.dataIndex
             };
         }
         
@@ -334,32 +341,36 @@ export class TreePointCloud {
     
     createHoverFrame() {
         // Create a frame that will appear when hovering over interactive points
-        const frameGeometry = new THREE.PlaneGeometry(0.5, 0.5);
+        const frameGeometry = new THREE.PlaneGeometry(0.8, 0.6);
         const frameMaterial = new THREE.MeshBasicMaterial({
             color: 0xFFFFFF,
             transparent: true,
-            opacity: 0.8,
+            opacity: 0.9,
             side: THREE.DoubleSide
         });
         
         this.hoverFrame = new THREE.Mesh(frameGeometry, frameMaterial);
         this.hoverFrame.visible = false;
         
-        // Add text to the frame
+        // Create default frame appearance
         const canvas = document.createElement('canvas');
-        canvas.width = 256;
-        canvas.height = 256;
+        canvas.width = 512;
+        canvas.height = 384;
         const context = canvas.getContext('2d');
-        context.fillStyle = '#000000';
+        
+        // Draw white background with border
+        context.fillStyle = '#FFFFFF';
         context.fillRect(0, 0, canvas.width, canvas.height);
-        context.strokeStyle = '#FFFFFF';
+        context.strokeStyle = '#000000';
         context.lineWidth = 8;
         context.strokeRect(8, 8, canvas.width - 16, canvas.height - 16);
+        
+        // Add default text
         context.font = 'Bold 36px Arial';
         context.textAlign = 'center';
         context.textBaseline = 'middle';
-        context.fillStyle = '#FFFFFF';
-        context.fillText('CLICK HERE', canvas.width/2, canvas.height/2);
+        context.fillStyle = '#000000';
+        context.fillText('Whiteboard Preview', canvas.width/2, canvas.height/2);
         
         const texture = new THREE.CanvasTexture(canvas);
         this.hoverFrame.material.map = texture;
@@ -376,21 +387,27 @@ export class TreePointCloud {
         // Calculate objects intersecting the picking ray
         const intersects = this.raycaster.intersectObjects(this.interactivePoints.children);
         
-        // Reset hover state
+        // Reset hover state without affecting other points
         if (this.hoveredPoint) {
-            if (this.hoveredPoint.userData.isActivated) {
-                // Reset activated point size
-                const points = this.interactivePoints.children[1]; // Activated points cloud
-                points.material.size = this.params.interactivePointSize;
-                points.material.needsUpdate = true;
-            } else {
-                // Reset potential point size
-                const points = this.interactivePoints.children[0]; // Potential points cloud
-                points.material.size = this.params.interactivePointSize;
-                points.material.needsUpdate = true;
+            // Only reset the size of the previously hovered point
+            const pointCloud = this.hoveredPoint.object;
+            const index = this.hoveredPoint.index;
+            
+            // Get the position of this specific point
+            const position = new THREE.Vector3();
+            position.fromBufferAttribute(pointCloud.geometry.attributes.position, index);
+            
+            // Only reset the specific point's appearance
+            if (pointCloud.userData.isActivated) {
+                // Just hide the frame
+                this.hoverFrame.visible = false;
+                
+                // Update tooltip
+                const tooltip = document.getElementById('point-tooltip');
+                tooltip.style.display = 'none';
             }
+            
             this.hoveredPoint = null;
-            this.hoverFrame.visible = false;
         }
         
         // Check for new intersections
@@ -400,7 +417,8 @@ export class TreePointCloud {
             const index = intersection.index;
             
             // Get point data
-            const pointData = pointCloud.userData[`point_${index}`] || { isActivated: false };
+            const pointKey = `point_${index}`;
+            const pointData = pointCloud.userData[pointKey] || { isActivated: false };
             
             // Update hover state
             this.hoveredPoint = {
@@ -409,34 +427,98 @@ export class TreePointCloud {
                 userData: pointData
             };
             
-            // Highlight the point
-            pointCloud.material.size = this.params.hoverPointSize;
-            pointCloud.material.needsUpdate = true;
-            
-            // If it's an activated point, show the hover frame
+            // If it's an activated point, show the hover frame and username
             if (pointData.isActivated) {
-                // Update frame position
-                const position = new THREE.Vector3();
-                position.fromBufferAttribute(pointCloud.geometry.attributes.position, index);
+                // Find the original data for this point
+                const activatedPointInfo = this.activatedPoints.find(p => p.id === pointData.index);
+                const pointInfo = this.activatedPointData[pointData.dataIndex];
                 
-                // Convert position from local to world space
-                pointCloud.localToWorld(position);
-                
-                // Position the frame slightly in front of the point
-                this.hoverFrame.position.copy(position);
-                
-                // Make the frame always face the camera
-                this.hoverFrame.lookAt(camera.position);
-                
-                // Scale the frame based on distance from camera
-                const distance = camera.position.distanceTo(position);
-                const scale = Math.max(0.5, Math.min(1.5, distance * 0.1));
-                this.hoverFrame.scale.set(scale, scale, scale);
-                
-                // Make frame visible
-                this.hoverFrame.visible = true;
+                if (pointInfo) {
+                    // Update frame content to show the whiteboard preview
+                    this.updateHoverFrame(pointInfo.username, pointInfo.frameContent);
+                    
+                    // Update frame position
+                    const position = new THREE.Vector3();
+                    position.fromBufferAttribute(pointCloud.geometry.attributes.position, index);
+                    
+                    // Convert position from local to world space
+                    pointCloud.localToWorld(position);
+                    
+                    // Position the frame slightly in front of the point
+                    this.hoverFrame.position.copy(position);
+                    this.hoverFrame.position.y += 0.3; // Position slightly above the point
+                    
+                    // Make the frame always face the camera
+                    this.hoverFrame.lookAt(camera.position);
+                    
+                    // Scale the frame based on distance from camera
+                    const distance = camera.position.distanceTo(position);
+                    const scale = Math.max(0.5, Math.min(1.5, distance * 0.1));
+                    this.hoverFrame.scale.set(scale, scale, scale);
+                    
+                    // Make frame visible
+                    this.hoverFrame.visible = true;
+                    
+                    // Update tooltip with username
+                    const tooltip = document.getElementById('point-tooltip');
+                    tooltip.textContent = pointInfo.username;
+                    tooltip.style.display = 'block';
+                    
+                    // Position tooltip near mouse
+                    const x = (this.mouse.x + 1) / 2 * window.innerWidth;
+                    const y = (-this.mouse.y + 1) / 2 * window.innerHeight;
+                    tooltip.style.left = `${x + 15}px`;
+                    tooltip.style.top = `${y - 15}px`;
+                }
             }
+        } else {
+            // Hide tooltip when not hovering over any point
+            const tooltip = document.getElementById('point-tooltip');
+            tooltip.style.display = 'none';
         }
+    }
+    
+    updateHoverFrame(username, frameContent) {
+        // Update the hover frame to show username and whiteboard preview
+        const canvas = document.createElement('canvas');
+        canvas.width = 256;
+        canvas.height = 256;
+        const context = canvas.getContext('2d');
+        
+        // Draw frame background
+        context.fillStyle = '#FFFFFF';
+        context.fillRect(0, 0, canvas.width, canvas.height);
+        
+        // Draw border
+        context.strokeStyle = '#000000';
+        context.lineWidth = 4;
+        context.strokeRect(4, 4, canvas.width - 8, canvas.height - 8);
+        
+        // Draw username header
+        context.fillStyle = '#2C3E50';
+        context.fillRect(4, 4, canvas.width - 8, 40);
+        
+        // Add username text
+        context.font = 'Bold 20px Arial';
+        context.textAlign = 'center';
+        context.textBaseline = 'middle';
+        context.fillStyle = '#FFFFFF';
+        context.fillText(username, canvas.width/2, 24);
+        
+        // Draw whiteboard preview content
+        context.fillStyle = '#000000';
+        context.font = '16px Arial';
+        context.fillText(frameContent, canvas.width/2, canvas.height/2);
+        context.fillText('Click to view whiteboard', canvas.width/2, canvas.height - 30);
+        
+        // Update texture
+        if (this.hoverFrame.material.map) {
+            this.hoverFrame.material.map.dispose();
+        }
+        
+        const texture = new THREE.CanvasTexture(canvas);
+        this.hoverFrame.material.map = texture;
+        this.hoverFrame.material.needsUpdate = true;
     }
 
     animate() {

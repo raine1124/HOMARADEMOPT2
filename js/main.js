@@ -55,7 +55,7 @@ const tree = new TreePointCloud({
     potentialPointsCount: 150,     // Number of potential interactive points
     activatedPointsCount: 5,       // Number of activated (red) points
     activatedPointColor: 0xFF0000, // Red color for activated points
-    potentialPointColor: 0xFFFF00, // Yellow color for potential points
+    potentialPointColor: 0x00FF00, // Green color for potential points
     normalPointSize: 0.03,         // Size of regular tree points
     interactivePointSize: 0.08,    // Size of interactive points
     hoverPointSize: 0.12           // Size when hovering over a point
@@ -107,7 +107,7 @@ infoPanel.style = `
 `;
 infoPanel.innerHTML = `
     <h3>Interactive Tree Points</h3>
-    <p>Yellow points: Potential interaction points (${tree.params.potentialPointsCount})</p>
+    <p>Green points: Potential interaction points (${tree.params.potentialPointsCount})</p>
     <p>Red points: Activated points (${tree.params.activatedPointsCount}) - click to navigate</p>
     <p>Hover over any red point to see interaction frame.</p>
     <button id="close-info">Close</button>
