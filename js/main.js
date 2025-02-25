@@ -52,13 +52,7 @@ const tree = new TreePointCloud({
     colorVariation: 0.3,
     baseColor: 0x2E8B57,
     modelPath: 'models/tree.obj', // Make sure this path is correct
-    potentialPointsCount: 150,     // Number of potential interactive points
-    activatedPointsCount: 5,       // Number of activated (red) points
-    activatedPointColor: 0xFF0000, // Red color for activated points
-    potentialPointColor: 0x00FF00, // Green color for potential points
-    normalPointSize: 0.03,         // Size of regular tree points
-    interactivePointSize: 0.08,    // Size of interactive points
-    hoverPointSize: 0.12           // Size when hovering over a point
+    pointSize: 0.15 // Larger size for better visibility
 });
 
 // Add event listener to log when tree model loads
@@ -135,7 +129,7 @@ function animate() {
     
     // Only animate tree if it's fully loaded
     if (tree.points.children.length > 0) {
-        // Call the new update method that handles both animation and interaction
+        // Call update method which handles both animation and interaction
         tree.update(camera);
     }
     
