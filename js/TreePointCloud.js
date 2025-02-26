@@ -12,7 +12,15 @@ export class TreePointCloud {
             baseColor: new THREE.Color(params.baseColor || 0x228B22),
             modelPath: params.modelPath || 'path/to/your/tree.obj',
             // Interactive points params
-            pointSize: params.pointSize || 0.1
+            pointSize: params.pointSize || 0.1,
+            // Custom point positions - you can override these
+            customPointPositions: params.customPointPositions || [
+                { x: 1.2, y: 3.5, z: 0.5 },    // Point 1
+                { x: -1.5, y: 4.2, z: 1.1 },   // Point 2
+                { x: 0.3, y: 5.0, z: -0.8 },   // Point 3
+                { x: 2.0, y: 3.8, z: -1.2 },   // Point 4
+                { x: -0.8, y: 4.5, z: -2.0 }   // Point 5
+            ]
         };
 
         this.points = new THREE.Group();
@@ -234,31 +242,21 @@ export class TreePointCloud {
     }
     
     createInteractivePoints() {
-        // Create 5 distinct interactive points at different positions around the tree
-        
-        // Get the bounding box of the tree to properly position the points
-        const bbox = new THREE.Box3().setFromObject(this.points);
-        
-        // Define positions for 5 points around the tree (adjust as needed for your specific tree)
-        const positions = [
-            new THREE.Vector3(bbox.max.x * 0.7, bbox.max.y * 0.8, 0),
-            new THREE.Vector3(-bbox.max.x * 0.7, bbox.max.y * 0.7, bbox.max.z * 0.3),
-            new THREE.Vector3(0, bbox.max.y * 0.9, bbox.max.z * 0.7),
-            new THREE.Vector3(bbox.max.x * 0.5, bbox.max.y * 0.6, -bbox.max.z * 0.5),
-            new THREE.Vector3(-bbox.max.x * 0.4, bbox.max.y * 0.75, -bbox.max.z * 0.6)
-        ];
+        // Create points at custom positions defined in params
         
         // Create a geometry for the interactive points
         const geometry = new THREE.BufferGeometry();
         const vertices = [];
         const colors = [];
         
-        // Add the 5 points
-        for (let i = 0; i < 5; i++) {
+        // Add the points at custom positions
+        for (let i = 0; i < this.params.customPointPositions.length; i++) {
+            const point = this.params.customPointPositions[i];
+            
             vertices.push(
-                positions[i].x,
-                positions[i].y,
-                positions[i].z
+                point.x,
+                point.y,
+                point.z
             );
             
             // Red color for interactive points
@@ -266,7 +264,7 @@ export class TreePointCloud {
             
             // Store point data for later use
             this.interactivePoints.push({
-                position: positions[i],
+                position: new THREE.Vector3(point.x, point.y, point.z),
                 index: i
             });
         }
@@ -289,7 +287,7 @@ export class TreePointCloud {
         // Add the interactive points to the scene
         this.points.add(interactivePointsObject);
         
-        console.log("Added 5 interactive points");
+        console.log(`Added ${this.interactivePoints.length} interactive points at custom positions`);
     }
     
     checkHover(camera) {

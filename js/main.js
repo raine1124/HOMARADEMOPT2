@@ -51,8 +51,16 @@ const tree = new TreePointCloud({
     pointsPerLevel: 2000,
     colorVariation: 0.3,
     baseColor: 0x2E8B57,
-    modelPath: 'models/tree.obj', // Make sure this path is correct
-    pointSize: 0.15 // Larger size for better visibility
+    modelPath: 'models/tree.obj', 
+    pointSize: 0.15, // Larger size for better visibility
+    // Define exact positions for each interactive point
+    customPointPositions: [
+        { x: 2.0, y: 4.5, z: 0.0 },    // Point 1
+        { x: -1.8, y: 3.2, z: 1.5 },   // Point 2
+        { x: 0.5, y: 5.5, z: -1.0 },   // Point 3
+        { x: 1.2, y: 2.8, z: 2.2 },    // Point 4
+        { x: -1.0, y: 4.0, z: -2.0 }   // Point 5
+    ]
 });
 
 // Add event listener to log when tree model loads
