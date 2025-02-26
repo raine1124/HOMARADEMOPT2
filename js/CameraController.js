@@ -18,6 +18,11 @@ class CameraController {
         this.moveSpeed = 0.25;
         this.rotateSpeed = 0.05;
         this.dragSpeed = 0.25;
+        this.panSpeed = 0.01; // Pan speed for right-click drag
+        
+        // Zoom limits
+        this.minDistance = 5; // Minimum zoom distance
+        this.maxDistance = 200; // Maximum zoom distance
         
         // Spherical coordinates for orbital movement
         this.spherical = new THREE.Spherical();
@@ -78,21 +83,30 @@ class CameraController {
         const delta = new THREE.Vector2()
             .subVectors(this.mousePosition, this.previousMousePosition);
         
-        if (this.mouseButton === 0) { // Left click - Orbit
+        if (this.mouseButton === 0 || this.mouseButton === 1) { // Left click or middle click - Orbit
             this.sphericalDelta.theta -= delta.x * 0.002;
             this.sphericalDelta.phi -= delta.y * 0.002;
         }
-        if (this.mouseButton === 1) { // Left click - Orbit
-            this.sphericalDelta.theta -= delta.x * 0.002;
-            this.sphericalDelta.phi -= delta.y * 0.002;
-        }
-        else if (this.mouseButton === 2) { // Right click - Forward/backward
-            const forward = new THREE.Vector3(0, 0, -delta.y)
-                .applyQuaternion(this.camera.quaternion)
-                .multiplyScalar(this.dragSpeed);
+        else if (this.mouseButton === 2) { // Right click - Pan (Figma-like drag)
+            const deltaX = delta.x * this.panSpeed;
+            const deltaY = delta.y * this.panSpeed;
             
-            this.currentPosition.add(forward);
-            this.target.add(forward);
+            // Get right and up vectors from camera
+            const right = new THREE.Vector3();
+            const up = new THREE.Vector3(0, 1, 0);
+            right.crossVectors(this.camera.up, this.camera.getWorldDirection(new THREE.Vector3()));
+            right.normalize();
+            
+            // Calculate movement vectors
+            const moveRight = right.clone().multiplyScalar(-deltaX);
+            const moveUp = up.clone().multiplyScalar(deltaY);
+            
+            // Apply movement to both camera and target
+            this.currentPosition.add(moveRight).add(moveUp);
+            this.target.add(moveRight).add(moveUp);
+            
+            // Update spherical coordinates after panning
+            this.updateSpherical();
         }
     }
     
@@ -107,8 +121,19 @@ class CameraController {
             .applyQuaternion(this.camera.quaternion)
             .multiplyScalar(zoomAmount);
         
-        this.currentPosition.add(forward);
-        this.target.add(forward.multiplyScalar(0.5));
+        // Calculate new distance after zooming
+        const distanceToTarget = this.currentPosition.distanceTo(this.target);
+        const newDistance = distanceToTarget - zoomAmount; // Fix: use zoomAmount directly
+        
+        // Apply zoom only if within limits
+        if (newDistance >= this.minDistance && newDistance <= this.maxDistance) {
+            this.currentPosition.add(forward);
+            // Only move target a little bit
+            this.target.add(forward.clone().multiplyScalar(0.1));
+            
+            // Update spherical coordinates after zooming
+            this.updateSpherical();
+        }
     }
     
     onKeyDown(event) {
@@ -137,8 +162,16 @@ class CameraController {
         // Apply movement in camera's local space
         if (movement.lengthSq() > 0) {
             movement.applyQuaternion(this.camera.quaternion);
-            this.currentPosition.add(movement);
-            this.target.add(movement);
+            
+            // Check if movement would exceed distance limits
+            const distanceToTarget = this.currentPosition.distanceTo(this.target);
+            const newPos = this.currentPosition.clone().add(movement);
+            const newDistance = newPos.distanceTo(this.target);
+            
+            if (newDistance >= this.minDistance && newDistance <= this.maxDistance) {
+                this.currentPosition.add(movement);
+                this.target.add(movement);
+            }
         }
         
         // Apply orbital rotation
@@ -153,6 +186,13 @@ class CameraController {
             this.spherical.phi,
             Number.EPSILON,
             Math.PI - Number.EPSILON
+        );
+        
+        // Enforce distance limits
+        this.spherical.radius = THREE.MathUtils.clamp(
+            this.spherical.radius,
+            this.minDistance,
+            this.maxDistance
         );
         
         // Reset deltas
@@ -175,6 +215,27 @@ class CameraController {
         }
     }
     
+    // Set zoom limits
+    setZoomLimits(min, max) {
+        this.minDistance = min;
+        this.maxDistance = max;
+        
+        // Enforce limits on current position if needed
+        const currentDist = this.currentPosition.distanceTo(this.target);
+        if (currentDist < min) {
+            // Too close, move back
+            const dir = new THREE.Vector3().subVectors(this.currentPosition, this.target).normalize();
+            this.currentPosition.copy(this.target).add(dir.multiplyScalar(min));
+        } else if (currentDist > max) {
+            // Too far, move closer
+            const dir = new THREE.Vector3().subVectors(this.currentPosition, this.target).normalize();
+            this.currentPosition.copy(this.target).add(dir.multiplyScalar(max));
+        }
+        
+        // Update spherical coordinates
+        this.updateSpherical();
+    }
+    
     // Add reset method
     reset() {
         // Reset camera position and target to initial values
@@ -195,6 +256,11 @@ class CameraController {
     setInitialPosition(position, target = new THREE.Vector3(0, 0, 0)) {
         this.initialPosition.copy(position);
         this.initialTarget.copy(target);
+    }
+    
+    // Set the panning speed
+    setPanSpeed(speed) {
+        this.panSpeed = speed;
     }
     
     dispose() {

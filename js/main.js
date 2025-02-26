@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { TreePointCloud } from './TreePointCloud.js';
 import { CameraController } from './CameraController.js';
 import { LoadingAnimation } from './loading.js';
+import { Environment } from './Environment.js';
 
 // Initialize loading animation
 const loadingAnimation = new LoadingAnimation();
@@ -15,9 +16,9 @@ scene.background = new THREE.Color(0x111111);
 const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
 
 // Set a further initial camera position
-const INITIAL_CAMERA_POSITION = new THREE.Vector3(0, 35, 35);
+const INITIAL_CAMERA_POSITION = new THREE.Vector3(0, 70, 50);
 camera.position.copy(INITIAL_CAMERA_POSITION);
-camera.lookAt(0, 70, 0);
+camera.lookAt(0, 100, 0);
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
@@ -60,6 +61,10 @@ document.body.appendChild(uiContainer);
 
 // Initialize camera controller with initial position
 const cameraController = new CameraController(camera, renderer.domElement, INITIAL_CAMERA_POSITION);
+
+// Add maximum zoom out limit
+cameraController.setZoomLimits(5, 200); // Min distance 5, Max distance 200
+
 // Prevent spacebar from resetting camera
 window.addEventListener('keydown', function(e) {
     // If the key pressed is spacebar (keyCode 32)
@@ -68,13 +73,10 @@ window.addEventListener('keydown', function(e) {
         e.preventDefault();
     }
 });
-// Add ambient and directional light for better visibility
-const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
-scene.add(ambientLight);
 
-const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
-directionalLight.position.set(5, 10, 7.5);
-scene.add(directionalLight);
+// Add environment (ground and lighting)
+const environment = new Environment();
+scene.add(environment.group);
 
 // Create tree point cloud with custom point positions
 const tree = new TreePointCloud({
@@ -109,6 +111,39 @@ resetButton.addEventListener('click', () => {
     cameraController.reset();
 });
 
+// Add day/night cycle button
+const cycleButton = document.createElement('button');
+cycleButton.id = 'cycleDayNight';
+cycleButton.textContent = 'Toggle Day/Night';
+cycleButton.style.cssText = `
+    padding: 8px 12px;
+    margin: 5px;
+    background: #333;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+`;
+uiContainer.appendChild(cycleButton);
+
+// Day/night state
+let isDayTime = true;
+
+// Day/night toggle functionality
+cycleButton.addEventListener('click', () => {
+    isDayTime = !isDayTime;
+    
+    if (isDayTime) {
+        // Switch to daytime
+        scene.background = new THREE.Color(0x111111);
+        environment.setDayTime();
+    } else {
+        // Switch to nighttime
+        scene.background = new THREE.Color(0x000022);
+        environment.setNightTime();
+    }
+});
+
 // Animation loop
 function animate() {
     requestAnimationFrame(animate);
@@ -118,6 +153,9 @@ function animate() {
         // Call update method which handles both animation and interaction
         tree.update(camera);
     }
+    
+    // Update environment effects
+    environment.update();
     
     cameraController.update();
     renderer.render(scene, camera);

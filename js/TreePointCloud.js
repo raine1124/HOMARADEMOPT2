@@ -13,7 +13,7 @@ export class TreePointCloud {
             modelPath: params.modelPath || 'path/to/your/tree.obj',
             // Interactive points params
             pointSize: params.pointSize || 0.1,
-            // Custom point positions - you can override these
+            // Custom point positions
             customPointPositions: params.customPointPositions || [
                 { x: 1.2, y: 3.5, z: 0.5 },    // Point 1
                 { x: -1.5, y: 4.2, z: 1.1 },   // Point 2
@@ -72,8 +72,8 @@ export class TreePointCloud {
                 console.log("Model loaded successfully");
                 
                 if (object.children && object.children.length > 0) {
-                    const geometry = object.children[0].geometry;
-                    this.createPointCloud(geometry);
+                    // Process the geometry and create colored points
+                    this.createColoredPointCloud(object);
                 } else {
                     console.error("Loaded object has no children. Using fallback geometry.");
                     this.createFallbackTree();
@@ -93,6 +93,269 @@ export class TreePointCloud {
         );
     }
     
+    createColoredPointCloud(object) {
+        // Extract positions from the loaded model
+        const modelGeometry = object.children[0].geometry;
+        const positions = modelGeometry.attributes.position;
+        
+        // Create a new buffer geometry for our colored point cloud
+        const geometry = new THREE.BufferGeometry();
+        const vertices = [];
+        const colors = [];
+        
+        // Define colors for trunk/branches and leaves
+        const trunkColor = new THREE.Color(0x8B4513); // Brown
+        const leafColor = new THREE.Color(0x228B22);  // Green
+        
+        // Height threshold - points below this are considered trunk/branches
+        // Adjust this based on your model's dimensions
+        const heightThreshold = 15;
+        const maxHeight = 40; // Approximate max height of the tree
+        
+        // Calculate the bounding box of the original model
+        const bbox = new THREE.Box3();
+        const tempGeometry = new THREE.BufferGeometry();
+        const tempPositions = [];
+        
+        for (let i = 0; i < positions.count; i++) {
+            tempPositions.push(new THREE.Vector3(
+                positions.getX(i), 
+                positions.getY(i), 
+                positions.getZ(i)
+            ));
+        }
+        
+        tempGeometry.setFromPoints(tempPositions);
+        bbox.setFromBufferAttribute(tempGeometry.getAttribute('position'));
+        
+        // Process all vertices from the original model
+        for (let i = 0; i < positions.count; i++) {
+            const x = positions.getX(i);
+            const y = positions.getY(i);
+            const z = positions.getZ(i);
+            
+            vertices.push(x, y, z);
+            
+            // Determine if this point is part of the trunk/branches or leaves
+            // Based on height and distance from central axis
+            const distanceFromCenter = Math.sqrt(x*x + z*z);
+            const normalizedHeight = y / maxHeight;
+            
+            // Color variation factors
+            const colorVariation = this.params.colorVariation;
+            let r, g, b;
+            
+            if (y < heightThreshold || (distanceFromCenter < 2 && y < maxHeight * 0.7)) {
+                // Trunk or branches - various shades of brown
+                const brownVariation = 0.7 + Math.random() * 0.3;
+                // Create variety in the browns
+                if (Math.random() > 0.6) {
+                    // Darker brown
+                    r = trunkColor.r * brownVariation * 0.8;
+                    g = trunkColor.g * brownVariation * 0.7;
+                    b = trunkColor.b * brownVariation * 0.5;
+                } else {
+                    // Regular brown
+                    r = trunkColor.r * brownVariation;
+                    g = trunkColor.g * brownVariation;
+                    b = trunkColor.b * brownVariation;
+                }
+            } else {
+                // Leaves - various shades of green
+                const greenVariation = 0.8 + Math.random() * 0.4;
+                
+                // Create more variety in the greens
+                if (Math.random() > 0.7) {
+                    // Lighter green (toward the outside or top)
+                    r = leafColor.r * greenVariation * 1.2;
+                    g = leafColor.g * greenVariation * 1.1;
+                    b = leafColor.b * greenVariation * 0.8;
+                } else {
+                    // Regular green
+                    r = leafColor.r * greenVariation;
+                    g = leafColor.g * greenVariation;
+                    b = leafColor.b * greenVariation;
+                }
+            }
+            
+            colors.push(r, g, b);
+        }
+        
+        // Add more points to fill in the shape, but strictly follow the original model
+        this.addDensityPoints(vertices, colors, maxHeight, bbox);
+        
+        geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+        geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+        
+        const material = new THREE.PointsMaterial({
+            size: 0.08,
+            vertexColors: true
+        });
+        
+        const pointCloud = new THREE.Points(geometry, material);
+        pointCloud.name = "treePoints";
+        this.points.add(pointCloud);
+    }
+    
+    addDensityPoints(vertices, colors, maxHeight, bbox) {
+        // Add additional points to fill in the tree shape
+        const extraPoints = 15000; // Number of extra points to add
+        const trunkColor = new THREE.Color(0x8B4513); // Brown
+        const leafColor = new THREE.Color(0x228B22);  // Green
+        
+        // Height threshold - points below this are considered trunk/branches
+        const heightThreshold = 15;
+        
+        // Create an OctTree or similar structure to check proximity to existing points
+        // For simplicity, we'll store existing points in an array and check distances
+        const existingPoints = [];
+        for (let i = 0; i < vertices.length; i += 3) {
+            existingPoints.push(new THREE.Vector3(vertices[i], vertices[i+1], vertices[i+2]));
+        }
+        
+        // Helper function to check if a point is close to any existing points
+        const isCloseToExistingPoint = (point, threshold = 0.5) => {
+            for (let i = 0; i < existingPoints.length; i++) {
+                if (point.distanceTo(existingPoints[i]) < threshold) {
+                    return true;
+                }
+            }
+            return false;
+        };
+        
+        // Calculate model dimensions for constraining points
+        const modelWidth = bbox.max.x - bbox.min.x;
+        const modelDepth = bbox.max.z - bbox.min.z;
+        const modelCenter = new THREE.Vector3();
+        bbox.getCenter(modelCenter);
+        
+        // Calculate trunk radius at different heights
+        const getTrunkRadiusAtHeight = (height) => {
+            // Base of tree has wider radius that narrows toward top
+            if (height < 5) {
+                return 1.0; // Base trunk radius
+            } else if (height < 15) {
+                return 0.8; // Middle trunk radius
+            } else {
+                // Radius increases again for leaf area, but follows model shape
+                return Math.max(0.5, 3.0 * (1 - height / maxHeight));
+            }
+        };
+        
+        // Add points constrained to actual model shape
+        const pointsAdded = new Set(); // Track added points to avoid duplicates
+        let attempts = 0;
+        const maxAttempts = extraPoints * 3; // Allow for some failed attempts
+        let addedCount = 0;
+        
+        while (addedCount < extraPoints && attempts < maxAttempts) {
+            attempts++;
+            
+            // Select a random existing point to generate a new one nearby
+            const basePointIndex = Math.floor(Math.random() * existingPoints.length);
+            const basePoint = existingPoints[basePointIndex];
+            
+            // Generate a point nearby with some jitter
+            const jitterAmount = 0.3;
+            const newPoint = new THREE.Vector3(
+                basePoint.x + (Math.random() - 0.5) * jitterAmount,
+                basePoint.y + (Math.random() - 0.5) * jitterAmount,
+                basePoint.z + (Math.random() - 0.5) * jitterAmount
+            );
+            
+            // Calculate distance from central axis
+            const distanceFromCenter = Math.sqrt(newPoint.x * newPoint.x + newPoint.z * newPoint.z);
+            
+            // Determine if this point is valid based on model shape and height
+            const heightRatio = newPoint.y / maxHeight;
+            let isValid = false;
+            
+            if (newPoint.y < heightThreshold) {
+                // Bottom trunk area - keep points very close to center
+                isValid = distanceFromCenter < getTrunkRadiusAtHeight(newPoint.y);
+            } else if (newPoint.y > maxHeight * 0.85) {
+                // Top of tree - cone shape that gets narrower
+                const topRadius = modelWidth * 0.2 * (1 - (newPoint.y - maxHeight * 0.85) / (maxHeight * 0.15));
+                isValid = distanceFromCenter < topRadius;
+            } else {
+                // Middle of tree - follow the model shape more closely
+                // Calculate a radius that follows the model shape at this height
+                // This constrains new points to be near existing ones
+                const nearbyPoints = existingPoints.filter(p => 
+                    Math.abs(p.y - newPoint.y) < 2.0
+                );
+                
+                if (nearbyPoints.length > 0) {
+                    // Find average distance from center for points at this height
+                    let avgDistFromCenter = 0;
+                    nearbyPoints.forEach(p => {
+                        avgDistFromCenter += Math.sqrt(p.x * p.x + p.z * p.z);
+                    });
+                    avgDistFromCenter /= nearbyPoints.length;
+                    
+                    // Allow points to be within a certain range of this average
+                    isValid = distanceFromCenter < avgDistFromCenter * 1.2;
+                } else {
+                    // If no nearby points at this height, use default formula
+                    isValid = distanceFromCenter < modelWidth * 0.25 * (1 - Math.abs(heightRatio - 0.6));
+                }
+            }
+            
+            // Skip if not valid or too close to existing points
+            if (!isValid || isCloseToExistingPoint(newPoint, 0.2)) {
+                continue;
+            }
+            
+            // Point passes all checks, add it
+            const pointKey = `${Math.round(newPoint.x*10)},${Math.round(newPoint.y*10)},${Math.round(newPoint.z*10)}`;
+            if (pointsAdded.has(pointKey)) {
+                continue; // Skip duplicates
+            }
+            
+            pointsAdded.add(pointKey);
+            vertices.push(newPoint.x, newPoint.y, newPoint.z);
+            existingPoints.push(newPoint);
+            addedCount++;
+            
+            // Determine color based on height and distance from central axis
+            let r, g, b;
+            
+            if (newPoint.y < heightThreshold || (distanceFromCenter < 1.0 && newPoint.y < maxHeight * 0.7)) {
+                // Trunk or branches - various shades of brown
+                const brownVariation = 0.7 + Math.random() * 0.3;
+                if (Math.random() > 0.6) {
+                    // Darker brown
+                    r = trunkColor.r * brownVariation * 0.8;
+                    g = trunkColor.g * brownVariation * 0.7;
+                    b = trunkColor.b * brownVariation * 0.5;
+                } else {
+                    // Regular brown
+                    r = trunkColor.r * brownVariation;
+                    g = trunkColor.g * brownVariation;
+                    b = trunkColor.b * brownVariation;
+                }
+            } else {
+                // Leaves - various shades of green
+                const greenVariation = 0.8 + Math.random() * 0.4;
+                if (Math.random() > 0.7) {
+                    // Lighter green
+                    r = leafColor.r * greenVariation * 1.2;
+                    g = leafColor.g * greenVariation * 1.1;
+                    b = leafColor.b * greenVariation * 0.8;
+                } else {
+                    // Regular green
+                    r = leafColor.r * greenVariation;
+                    g = leafColor.g * greenVariation;
+                    b = leafColor.b * greenVariation;
+                }
+            }
+            
+            colors.push(r, g, b);
+        }
+        
+        console.log(`Added ${addedCount} density points after ${attempts} attempts`);
+    }
+    
     createFallbackTree() {
         const height = this.params.height;
         const radiusBottom = this.params.radiusBase;
@@ -109,7 +372,7 @@ export class TreePointCloud {
         const foliage = new THREE.Mesh(foliageGeometry, foliageMaterial);
         foliage.position.y = height/2 + height/6;
         
-        // Convert to points
+        // Convert to points with proper colors
         const trunkPoints = this.meshToPoints(trunk, 0x8B4513);
         const foliagePoints = this.meshToPoints(foliage, this.params.baseColor);
         
@@ -169,6 +432,8 @@ export class TreePointCloud {
         return new THREE.Points(pointsGeometry, pointsMaterial);
     }
 
+    // Rest of the code remains the same...
+    
     createPointCloud(geometry) {
         const material = new THREE.PointsMaterial({
             size: 0.03,
@@ -426,4 +691,4 @@ export class TreePointCloud {
             this.hoverFrame.rotation.z += 0.005;
         }
     }
-    }
+}
