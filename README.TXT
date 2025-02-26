@@ -1,3 +1,79 @@
+what i was working on next: 
+
+for TreePointCloud.js
+
+
+addExtraTrunkPoints(vertices, colors, bbox) {
+        // Add extra points specifically to enhance trunk detail
+        const trunkPoints = 3000; // Number of extra trunk points
+        const trunkColor = new THREE.Color(0x8B4513); // Brown
+        const darkTrunkColor = new THREE.Color(0x654321); // Dark brown
+        const heightThreshold = 15; // Max height for trunk
+        
+        // Define trunk shape
+        const trunkBottom = 0;
+        const trunkRadius = 1.5;
+        
+        for (let i = 0; i < trunkPoints; i++) {
+            // Generate a point on the cylinder surface
+            const height = trunkBottom + Math.random() * heightThreshold;
+            
+            // Radius decreases slightly with height for taper
+            const taperFactor = 1 - (height / heightThreshold) * 0.3;
+            const radius = trunkRadius * taperFactor;
+            
+            // Generate position on surface with some inward variation
+            const angle = Math.random() * Math.PI * 2;
+            const radialPos = radius * (0.8 + Math.random() * 0.2);
+            
+            const x = Math.cos(angle) * radialPos;
+            const y = height;
+            const z = Math.sin(angle) * radialPos;
+            
+            vertices.push(x, y, z);
+            
+            // Bark texture effect using angles and noise
+            
+            // Create vertical striping based on angle
+            const stripeFactor = Math.sin(angle * 8) * 0.5 + 0.5;
+            
+            // Create horizontal rings
+            const ringFactor = Math.sin(height * 2) * 0.5 + 0.5;
+            
+            // Combine effects with some randomness
+            const textureFactor = stripeFactor * 0.7 + ringFactor * 0.3;
+            const randomFactor = 0.85 + Math.random() * 0.3;
+            
+            let r, g, b;
+            
+            if (textureFactor < 0.45 || Math.random() > 0.75) {
+                // Darker crevices in bark
+                r = darkTrunkColor.r * randomFactor * 0.9;
+                g = darkTrunkColor.g * randomFactor * 0.9;
+                b = darkTrunkColor.b * randomFactor * 0.9;
+            } else {
+                // Regular bark
+                r = trunkColor.r * randomFactor;
+                g = trunkColor.g * randomFactor;
+                b = trunkColor.b * randomFactor;
+            }
+            
+            colors.push(r, g, b);
+        }
+    }
+
+
+
+
+
+
+    
+********
+**********
+***********herers an integrated version that fucks up other stuff and still isnt the way i want 
+    
+    
+    
 import * as THREE from 'three';
 import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js'; 
 
@@ -11,9 +87,7 @@ export class TreePointCloud {
             colorVariation: params.colorVariation || 0.2,
             baseColor: new THREE.Color(params.baseColor || 0x228B22),
             modelPath: params.modelPath || 'path/to/your/tree.obj',
-            // Interactive points params
             pointSize: params.pointSize || 0.1,
-            // Custom point positions
             customPointPositions: params.customPointPositions || [
                 { x: 1.2, y: 3.5, z: 0.5 },    // Point 1
                 { x: -1.5, y: 4.2, z: 1.1 },   // Point 2
@@ -27,13 +101,13 @@ export class TreePointCloud {
         
         // Create raycaster for interactions
         this.raycaster = new THREE.Raycaster();
-        this.raycaster.params.Points.threshold = 0.2; // Larger threshold for easier selection
+        this.raycaster.params.Points.threshold = 0.2;
         this.mouse = new THREE.Vector2();
         
         // Track current hovered point
         this.hoveredPoint = null;
         
-        // Create array to store the 5 interactive points
+        // Create array to store interactive points
         this.interactivePoints = [];
         
         // Create hover frame
@@ -46,7 +120,6 @@ export class TreePointCloud {
     
     setupEventListeners() {
         window.addEventListener('mousemove', (event) => {
-            // Update mouse position for raycasting
             this.mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
             this.mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
         });
@@ -55,8 +128,6 @@ export class TreePointCloud {
             if (this.hoveredPoint) {
                 const index = this.hoveredPoint.userData.index;
                 console.log(`Clicked on point ${index}`);
-                
-                // Open the corresponding HTML page
                 window.open(`point${index + 1}.html`, '_blank');
             }
         });
@@ -72,14 +143,14 @@ export class TreePointCloud {
                 console.log("Model loaded successfully");
                 
                 if (object.children && object.children.length > 0) {
-                    // Process the geometry and create colored points
-                    this.createColoredPointCloud(object);
+                    // Process the loaded tree model
+                    this.processTreeModel(object);
                 } else {
                     console.error("Loaded object has no children. Using fallback geometry.");
                     this.createFallbackTree();
                 }
                 
-                // Add the interactive points after creating the tree
+                // Add interactive points
                 this.createInteractivePoints();
             },
             (xhr) => {
@@ -93,42 +164,33 @@ export class TreePointCloud {
         );
     }
     
-    createColoredPointCloud(object) {
-        // Extract positions from the loaded model
+    processTreeModel(object) {
+        // Extract model geometry from loaded object
         const modelGeometry = object.children[0].geometry;
         const positions = modelGeometry.attributes.position;
         
-        // Create a new buffer geometry for our colored point cloud
+        // Create new geometry for colored points
         const geometry = new THREE.BufferGeometry();
         const vertices = [];
         const colors = [];
         
-        // Define colors for trunk/branches and leaves
-        const trunkColor = new THREE.Color(0x8B4513); // Brown
-        const leafColor = new THREE.Color(0x228B22);  // Green
+        // Colors
+        const trunkColor = new THREE.Color(0x8B4513);
+        const darkTrunkColor = new THREE.Color(0x654321);
+        const leafColor = new THREE.Color(0x228B22);
         
-        // Height threshold - points below this are considered trunk/branches
-        // Adjust this based on your model's dimensions
-        const heightThreshold = 15;
-        const maxHeight = 40; // Approximate max height of the tree
-        
-        // Calculate the bounding box of the original model
-        const bbox = new THREE.Box3();
-        const tempGeometry = new THREE.BufferGeometry();
-        const tempPositions = [];
-        
+        // Find model dimensions
+        const tempVec = new THREE.Vector3();
+        let maxHeight = 0;
         for (let i = 0; i < positions.count; i++) {
-            tempPositions.push(new THREE.Vector3(
-                positions.getX(i), 
-                positions.getY(i), 
-                positions.getZ(i)
-            ));
+            tempVec.fromBufferAttribute(positions, i);
+            maxHeight = Math.max(maxHeight, tempVec.y);
         }
         
-        tempGeometry.setFromPoints(tempPositions);
-        bbox.setFromBufferAttribute(tempGeometry.getAttribute('position'));
+        // Height threshold for trunk vs leaves
+        const trunkHeight = maxHeight * 0.4;
         
-        // Process all vertices from the original model
+        // Process original vertices
         for (let i = 0; i < positions.count; i++) {
             const x = positions.getX(i);
             const y = positions.getY(i);
@@ -136,54 +198,43 @@ export class TreePointCloud {
             
             vertices.push(x, y, z);
             
-            // Determine if this point is part of the trunk/branches or leaves
-            // Based on height and distance from central axis
-            const distanceFromCenter = Math.sqrt(x*x + z*z);
-            const normalizedHeight = y / maxHeight;
+            // Determine color based on height and distance from center
+            const distFromCenter = Math.sqrt(x*x + z*z);
             
-            // Color variation factors
-            const colorVariation = this.params.colorVariation;
+            // Color selection
             let r, g, b;
             
-            if (y < heightThreshold || (distanceFromCenter < 2 && y < maxHeight * 0.7)) {
-                // Trunk or branches - various shades of brown
-                const brownVariation = 0.7 + Math.random() * 0.3;
-                // Create variety in the browns
-                if (Math.random() > 0.6) {
-                    // Darker brown
-                    r = trunkColor.r * brownVariation * 0.8;
-                    g = trunkColor.g * brownVariation * 0.7;
-                    b = trunkColor.b * brownVariation * 0.5;
+            if (y < trunkHeight || (distFromCenter < 1.5 && y < maxHeight * 0.6)) {
+                // Trunk or branch
+                const barkDetail = Math.sin(y * 2 + Math.atan2(z, x) * 4) * 0.5 + 0.5;
+                const randomFactor = 0.85 + Math.random() * 0.3;
+                
+                if (barkDetail < 0.4 || Math.random() > 0.7) {
+                    // Dark bark grooves
+                    r = darkTrunkColor.r * randomFactor;
+                    g = darkTrunkColor.g * randomFactor;
+                    b = darkTrunkColor.b * randomFactor;
                 } else {
-                    // Regular brown
-                    r = trunkColor.r * brownVariation;
-                    g = trunkColor.g * brownVariation;
-                    b = trunkColor.b * brownVariation;
+                    // Regular bark
+                    r = trunkColor.r * randomFactor;
+                    g = trunkColor.g * randomFactor;
+                    b = trunkColor.b * randomFactor;
                 }
             } else {
-                // Leaves - various shades of green
+                // Leaves
                 const greenVariation = 0.8 + Math.random() * 0.4;
-                
-                // Create more variety in the greens
-                if (Math.random() > 0.7) {
-                    // Lighter green (toward the outside or top)
-                    r = leafColor.r * greenVariation * 1.2;
-                    g = leafColor.g * greenVariation * 1.1;
-                    b = leafColor.b * greenVariation * 0.8;
-                } else {
-                    // Regular green
-                    r = leafColor.r * greenVariation;
-                    g = leafColor.g * greenVariation;
-                    b = leafColor.b * greenVariation;
-                }
+                r = leafColor.r * greenVariation;
+                g = leafColor.g * greenVariation;
+                b = leafColor.b * greenVariation;
             }
             
             colors.push(r, g, b);
         }
         
-        // Add more points to fill in the shape, but strictly follow the original model
-        this.addDensityPoints(vertices, colors, maxHeight, bbox);
+        // Add more points to enhance the model
+        this.addExtraPoints(vertices, colors, maxHeight, trunkHeight);
         
+        // Create the point cloud
         geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
         geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
         
@@ -197,55 +248,73 @@ export class TreePointCloud {
         this.points.add(pointCloud);
     }
     
-    addDensityPoints(vertices, colors, maxHeight, bbox) {
-        // Reduce point count to prevent browser crashes
-        const extraPoints = 5000; // Reduced from 15000
-        const trunkColor = new THREE.Color(0x8B4513); // Brown
-        const leafColor = new THREE.Color(0x228B22);  // Green
+    addExtraPoints(vertices, colors, maxHeight, trunkHeight) {
+        // Add points to enhance tree details
+        const trunkPoints = 2000;
+        const leafPoints = 3000;
         
-        // Height threshold - points below this are considered trunk/branches
-        const heightThreshold = 15;
+        // Colors
+        const trunkColor = new THREE.Color(0x8B4513);
+        const darkTrunkColor = new THREE.Color(0x654321);
+        const leafColor = new THREE.Color(0x228B22);
         
-        // Calculate model dimensions
-        const modelWidth = bbox.max.x - bbox.min.x;
-        const modelCenter = new THREE.Vector3();
-        bbox.getCenter(modelCenter);
+        // Add trunk points
+        for (let i = 0; i < trunkPoints; i++) {
+            // Generate trunk points in a cylinder with bark texture
+            const height = Math.random() * trunkHeight;
+            const taperFactor = 1 - (height / trunkHeight) * 0.3;
+            const angle = Math.random() * Math.PI * 2;
+            const radius = 1.2 * taperFactor;
+            
+            const x = Math.cos(angle) * radius * (0.8 + Math.random() * 0.2);
+            const y = height;
+            const z = Math.sin(angle) * radius * (0.8 + Math.random() * 0.2);
+            
+            vertices.push(x, y, z);
+            
+            // Bark texture
+            const barkDetail = Math.sin(height * 2 + angle * 6) * 0.5 + 0.5;
+            const randomFactor = 0.85 + Math.random() * 0.3;
+            
+            let r, g, b;
+            if (barkDetail < 0.4 || Math.random() > 0.7) {
+                // Dark bark grooves
+                r = darkTrunkColor.r * randomFactor;
+                g = darkTrunkColor.g * randomFactor;
+                b = darkTrunkColor.b * randomFactor;
+            } else {
+                // Regular bark
+                r = trunkColor.r * randomFactor;
+                g = trunkColor.g * randomFactor;
+                b = trunkColor.b * randomFactor;
+            }
+            
+            colors.push(r, g, b);
+        }
         
-        // Add points constrained to model shape
-        for (let i = 0; i < extraPoints; i++) {
-            // Pick a random existing vertex as reference
+        // Add leaf points
+        for (let i = 0; i < leafPoints; i++) {
+            // Find a random existing vertex to use as reference
             const refIdx = Math.floor(Math.random() * (vertices.length / 3)) * 3;
             const refX = vertices[refIdx];
             const refY = vertices[refIdx + 1];
             const refZ = vertices[refIdx + 2];
             
-            // Add small random offsets (not too far from original points)
-            const offsetRange = 0.3;
-            const x = refX + (Math.random() - 0.5) * offsetRange;
-            const y = refY + (Math.random() - 0.5) * offsetRange;
-            const z = refZ + (Math.random() - 0.5) * offsetRange;
+            // Only add leaf points if reference is in leaf area
+            if (refY < trunkHeight) continue;
             
-            // Calculate distance from central axis
-            const distanceFromCenter = Math.sqrt(x*x + z*z);
+            // Add small random offset
+            const x = refX + (Math.random() - 0.5) * 0.4;
+            const y = refY + (Math.random() - 0.5) * 0.4;
+            const z = refZ + (Math.random() - 0.5) * 0.4;
             
             vertices.push(x, y, z);
             
-            // Determine color based on height and distance from axis
-            let r, g, b;
-            
-            if (y < heightThreshold || (distanceFromCenter < 1.5 && y < maxHeight * 0.7)) {
-                // Trunk or branches - brown
-                const brownVariation = 0.7 + Math.random() * 0.3;
-                r = trunkColor.r * brownVariation;
-                g = trunkColor.g * brownVariation;
-                b = trunkColor.b * brownVariation;
-            } else {
-                // Leaves - green
-                const greenVariation = 0.8 + Math.random() * 0.4;
-                r = leafColor.r * greenVariation;
-                g = leafColor.g * greenVariation;
-                b = leafColor.b * greenVariation;
-            }
+            // Leaf color
+            const greenVariation = 0.8 + Math.random() * 0.4;
+            const r = leafColor.r * greenVariation;
+            const g = leafColor.g * greenVariation;
+            const b = leafColor.b * greenVariation * (0.8 + Math.random() * 0.4);
             
             colors.push(r, g, b);
         }
@@ -255,19 +324,19 @@ export class TreePointCloud {
         const height = this.params.height;
         const radiusBottom = this.params.radiusBase;
         
-        // Create tree trunk
+        // Create trunk
         const trunkGeometry = new THREE.CylinderGeometry(radiusBottom/3, radiusBottom/2, height/3, 8);
         const trunkMaterial = new THREE.MeshBasicMaterial({color: 0x8B4513});
         const trunk = new THREE.Mesh(trunkGeometry, trunkMaterial);
         trunk.position.y = height/6;
         
-        // Create foliage (cone)
+        // Create foliage
         const foliageGeometry = new THREE.ConeGeometry(radiusBottom*2, height*2/3, 8);
         const foliageMaterial = new THREE.MeshBasicMaterial({color: this.params.baseColor});
         const foliage = new THREE.Mesh(foliageGeometry, foliageMaterial);
         foliage.position.y = height/2 + height/6;
         
-        // Convert to points with proper colors
+        // Convert to points
         const trunkPoints = this.meshToPoints(trunk, 0x8B4513);
         const foliagePoints = this.meshToPoints(foliage, this.params.baseColor);
         
@@ -301,7 +370,7 @@ export class TreePointCloud {
             );
         }
         
-        // Add more random points inside the mesh for density
+        // Add more points for density
         const bbox = new THREE.Box3().setFromObject(mesh);
         for (let i = 0; i < 1000; i++) {
             const x = bbox.min.x + Math.random() * (bbox.max.x - bbox.min.x);
@@ -325,18 +394,6 @@ export class TreePointCloud {
         });
         
         return new THREE.Points(pointsGeometry, pointsMaterial);
-    }
-
-    // Rest of the code remains the same...
-    
-    createPointCloud(geometry) {
-        const material = new THREE.PointsMaterial({
-            size: 0.03,
-            vertexColors: true
-        });
-
-        const pointCloud = new THREE.Points(geometry, material);
-        this.points.add(pointCloud); 
     }
     
     createHoverFrame() {
@@ -402,9 +459,7 @@ export class TreePointCloud {
     }
     
     createInteractivePoints() {
-        // Create points at custom positions defined in params
-        
-        // Create a geometry for the interactive points
+        // Create points at custom positions
         const geometry = new THREE.BufferGeometry();
         const vertices = [];
         const colors = [];
@@ -422,7 +477,7 @@ export class TreePointCloud {
             // Red color for interactive points
             colors.push(1.0, 0.0, 0.0);
             
-            // Store point data for later use
+            // Store point data
             this.interactivePoints.push({
                 position: new THREE.Vector3(point.x, point.y, point.z),
                 index: i
@@ -432,7 +487,6 @@ export class TreePointCloud {
         geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
         geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
         
-        // Create larger points for better visibility and interaction
         const material = new THREE.PointsMaterial({
             size: this.params.pointSize,
             vertexColors: true
@@ -440,21 +494,17 @@ export class TreePointCloud {
         
         const interactivePointsObject = new THREE.Points(geometry, material);
         interactivePointsObject.name = "interactivePoints";
-        
-        // Add user data to the points object for raycasting
         interactivePointsObject.userData.isInteractive = true;
         
-        // Add the interactive points to the scene
         this.points.add(interactivePointsObject);
-        
-        console.log(`Added ${this.interactivePoints.length} interactive points at custom positions`);
+        console.log(`Added ${this.interactivePoints.length} interactive points`);
     }
     
     checkHover(camera) {
         // Update the picking ray
         this.raycaster.setFromCamera(this.mouse, camera);
         
-        // Get all points objects in our group
+        // Get interactive points objects
         const pointsObjects = [];
         this.points.traverse(child => {
             if (child instanceof THREE.Points && child.name === "interactivePoints") {
@@ -462,41 +512,35 @@ export class TreePointCloud {
             }
         });
         
-        if (pointsObjects.length === 0) {
-            return; // No points to interact with yet
-        }
+        if (pointsObjects.length === 0) return;
         
         // Check for intersections
         const intersects = this.raycaster.intersectObjects(pointsObjects);
         
-        // Hide hover frame if no longer hovering
+        // Reset hover if no longer hovering
         if (this.hoveredPoint && intersects.length === 0) {
-            // Reset the material of previously hovered point
+            // Reset color
             const points = pointsObjects[0];
             const colors = points.geometry.attributes.color;
-            
-            // Reset to red
             colors.setXYZ(this.hoveredPoint.index, 1.0, 0.0, 0.0);
             colors.needsUpdate = true;
             
             // Hide frame
             this.hoverFrame.visible = false;
             
-            // Remove tooltip if it exists
-            const existingTooltip = document.getElementById('point-tooltip');
-            if (existingTooltip) {
-                existingTooltip.style.display = 'none';
-            }
+            // Hide tooltip
+            const tooltip = document.getElementById('point-tooltip');
+            if (tooltip) tooltip.style.display = 'none';
             
             this.hoveredPoint = null;
         }
         
-        // Handle new hover
+        // Process new hover
         if (intersects.length > 0) {
             const intersection = intersects[0];
             const index = intersection.index;
             
-            // If hovering over a different point than before
+            // If hovering over a different point
             if (!this.hoveredPoint || this.hoveredPoint.index !== index) {
                 // Reset previous point if exists
                 if (this.hoveredPoint) {
@@ -515,7 +559,7 @@ export class TreePointCloud {
                     userData: { index: index }
                 };
                 
-                // Change color to bright yellow for hover state
+                // Change color to yellow for hover
                 const points = pointsObjects[0];
                 const colors = points.geometry.attributes.color;
                 colors.setXYZ(index, 1.0, 1.0, 0.0);
@@ -524,17 +568,17 @@ export class TreePointCloud {
                 // Update and show hover frame
                 this.updateFrameTexture(`Point ${index + 1} Content`);
                 
-                // Position the frame above the point
+                // Position frame above point
                 const pointPosition = new THREE.Vector3().fromBufferAttribute(
                     intersection.object.geometry.attributes.position, index
                 );
                 
                 this.hoverFrame.position.copy(pointPosition);
-                this.hoverFrame.position.y += 0.4; // Position above the point
-                this.hoverFrame.lookAt(camera.position); // Face the camera
+                this.hoverFrame.position.y += 0.4;
+                this.hoverFrame.lookAt(camera.position);
                 this.hoverFrame.visible = true;
                 
-                // Show tooltip with point info
+                // Show tooltip
                 let tooltip = document.getElementById('point-tooltip');
                 if (!tooltip) {
                     tooltip = document.createElement('div');
@@ -549,7 +593,6 @@ export class TreePointCloud {
                     document.body.appendChild(tooltip);
                 }
                 
-                // Set tooltip content and position
                 tooltip.textContent = `Point ${index + 1} - Click to open`;
                 tooltip.style.display = 'block';
                 
@@ -562,26 +605,22 @@ export class TreePointCloud {
         }
     }
 
-    // Call this in the animation loop to handle hovering
     update(camera) {
         this.checkHover(camera);
         this.animate();
     }
 
     animate() {
-        // Only animate the interactive points - no tree sway animation
-        
         // Pulse animation for interactive points
         this.points.traverse(child => {
             if (child instanceof THREE.Points && child.name === "interactivePoints") {
-                // Pulse size animation
                 const pulseFactor = 1.0 + 0.3 * Math.sin(Date.now() * 0.002);
                 child.material.size = this.params.pointSize * pulseFactor;
                 child.material.needsUpdate = true;
             }
         });
         
-        // Rotate hover frame slightly if visible
+        // Rotate hover frame if visible
         if (this.hoverFrame && this.hoverFrame.visible) {
             this.hoverFrame.rotation.z += 0.005;
         }

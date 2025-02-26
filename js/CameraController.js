@@ -58,38 +58,57 @@ class CameraController {
     }
     
     setupEventListeners() {
-        this.domElement.addEventListener('mousedown', this.onMouseDown.bind(this));
-        document.addEventListener('mousemove', this.onMouseMove.bind(this));
-        document.addEventListener('mouseup', this.onMouseUp.bind(this));
-        this.domElement.addEventListener('wheel', this.onMouseWheel.bind(this));
-        document.addEventListener('keydown', this.onKeyDown.bind(this));
-        document.addEventListener('keyup', this.onKeyUp.bind(this));
-        this.domElement.addEventListener('contextmenu', (e) => e.preventDefault());
+        // Use bind to create bound methods that maintain 'this' context
+        this._boundMouseDown = this.onMouseDown.bind(this);
+        this._boundMouseMove = this.onMouseMove.bind(this);
+        this._boundMouseUp = this.onMouseUp.bind(this);
+        this._boundWheel = this.onMouseWheel.bind(this);
+        this._boundKeyDown = this.onKeyDown.bind(this);
+        this._boundKeyUp = this.onKeyUp.bind(this);
+        this._boundContextMenu = (e) => e.preventDefault();
+        
+        // Add listeners with bound methods
+        this.domElement.addEventListener('mousedown', this._boundMouseDown, false);
+        document.addEventListener('mousemove', this._boundMouseMove, false);
+        document.addEventListener('mouseup', this._boundMouseUp, false);
+        this.domElement.addEventListener('wheel', this._boundWheel, { passive: false });
+        document.addEventListener('keydown', this._boundKeyDown, false);
+        document.addEventListener('keyup', this._boundKeyUp, false);
+        this.domElement.addEventListener('contextmenu', this._boundContextMenu, false);
     }
     
     onMouseDown(event) {
+        // If another button is already pressed, ignore new button presses
+        if (this.isMouseDown) return;
+        
         this.isMouseDown = true;
         this.mouseButton = event.button;
         this.mousePosition.set(event.clientX, event.clientY);
-        this.previousMousePosition.copy(this.mousePosition);
     }
     
     onMouseMove(event) {
-        this.previousMousePosition.copy(this.mousePosition);
-        this.mousePosition.set(event.clientX, event.clientY);
+        // Get mouse movement delta
+        const newMousePosition = new THREE.Vector2(event.clientX, event.clientY);
+        const delta = new THREE.Vector2().subVectors(newMousePosition, this.mousePosition);
+        this.mousePosition.copy(newMousePosition);
         
         if (!this.isMouseDown) return;
         
-        const delta = new THREE.Vector2()
-            .subVectors(this.mousePosition, this.previousMousePosition);
+        // Use delta magnitude to prevent large jumps
+        const maxDelta = 20; // Max pixels of movement to consider per frame
+        if (delta.length() > maxDelta) {
+            delta.normalize().multiplyScalar(maxDelta);
+        }
         
         if (this.mouseButton === 0 || this.mouseButton === 1) { // Left click or middle click - Orbit
-            this.sphericalDelta.theta -= delta.x * 0.002;
-            this.sphericalDelta.phi -= delta.y * 0.002;
+            // INVERTED controls (opposite directions)
+            this.sphericalDelta.theta += delta.x * 0.002;
+            this.sphericalDelta.phi += delta.y * 0.002;
         }
-        else if (this.mouseButton === 2) { // Right click - Pan (Figma-like drag)
-            const deltaX = delta.x * this.panSpeed;
-            const deltaY = delta.y * this.panSpeed;
+        else if (this.mouseButton === 2) { // Right click - Pan
+            // Scale pan amount by distance to target for consistent speed
+            const distanceToTarget = this.spherical.radius;
+            const panScale = Math.max(0.01, distanceToTarget * 0.0005);
             
             // Get right and up vectors from camera
             const right = new THREE.Vector3();
@@ -97,41 +116,48 @@ class CameraController {
             right.crossVectors(this.camera.up, this.camera.getWorldDirection(new THREE.Vector3()));
             right.normalize();
             
-            // Calculate movement vectors
-            const moveRight = right.clone().multiplyScalar(-deltaX);
-            const moveUp = up.clone().multiplyScalar(deltaY);
+            // Calculate movement vectors with scaled pan amount - INVERTED
+            const moveRight = right.clone().multiplyScalar(delta.x * panScale);
+            const moveUp = up.clone().multiplyScalar(-delta.y * panScale);
             
-            // Apply movement to both camera and target
+            // Apply movement
             this.currentPosition.add(moveRight).add(moveUp);
             this.target.add(moveRight).add(moveUp);
             
-            // Update spherical coordinates after panning
+            // Update spherical coordinates
             this.updateSpherical();
         }
     }
     
-    onMouseUp() {
-        this.isMouseDown = false;
-        this.mouseButton = -1;
+    onMouseUp(event) {
+        // Only clear mouse state if the released button matches the tracked button
+        if (event.button === this.mouseButton) {
+            this.isMouseDown = false;
+            this.mouseButton = -1;
+        }
     }
     
     onMouseWheel(event) {
-        const zoomAmount = -event.deltaY * 0.1;
-        const forward = new THREE.Vector3(0, 0, -1)
-            .applyQuaternion(this.camera.quaternion)
-            .multiplyScalar(zoomAmount);
+        event.preventDefault();
         
-        // Calculate new distance after zooming
-        const distanceToTarget = this.currentPosition.distanceTo(this.target);
-        const newDistance = distanceToTarget - zoomAmount; // Fix: use zoomAmount directly
+        // Simple fixed zoom rate - INVERTED (negative becomes positive and vice versa)
+        const zoomStep = event.deltaY > 0 ? -2.0 : 2.0;
+        
+        // Direction from camera to target
+        const directionToTarget = new THREE.Vector3().subVectors(this.target, this.camera.position).normalize();
+        
+        // Move camera along the view direction
+        const newPosition = this.camera.position.clone().addScaledVector(directionToTarget, zoomStep);
+        
+        // Calculate new distance
+        const newDistance = newPosition.distanceTo(this.target);
         
         // Apply zoom only if within limits
         if (newDistance >= this.minDistance && newDistance <= this.maxDistance) {
-            this.currentPosition.add(forward);
-            // Only move target a little bit
-            this.target.add(forward.clone().multiplyScalar(0.1));
+            this.camera.position.copy(newPosition);
+            this.currentPosition.copy(newPosition);
             
-            // Update spherical coordinates after zooming
+            // Update spherical after changing position
             this.updateSpherical();
         }
     }
@@ -264,12 +290,14 @@ class CameraController {
     }
     
     dispose() {
-        this.domElement.removeEventListener('mousedown', this.onMouseDown.bind(this));
-        document.removeEventListener('mousemove', this.onMouseMove.bind(this));
-        document.removeEventListener('mouseup', this.onMouseUp.bind(this));
-        this.domElement.removeEventListener('wheel', this.onMouseWheel.bind(this));
-        document.removeEventListener('keydown', this.onKeyDown.bind(this));
-        document.removeEventListener('keyup', this.onKeyUp.bind(this));
+        // Remove event listeners using stored bound methods
+        this.domElement.removeEventListener('mousedown', this._boundMouseDown);
+        document.removeEventListener('mousemove', this._boundMouseMove);
+        document.removeEventListener('mouseup', this._boundMouseUp);
+        this.domElement.removeEventListener('wheel', this._boundWheel);
+        document.removeEventListener('keydown', this._boundKeyDown);
+        document.removeEventListener('keyup', this._boundKeyUp);
+        this.domElement.removeEventListener('contextmenu', this._boundContextMenu);
     }
 }
 
