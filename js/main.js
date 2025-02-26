@@ -15,9 +15,9 @@ scene.background = new THREE.Color(0x111111);
 const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
 
 // Set a further initial camera position
-const INITIAL_CAMERA_POSITION = new THREE.Vector3(0, 45, 80);
+const INITIAL_CAMERA_POSITION = new THREE.Vector3(0, 60, 45);
 camera.position.copy(INITIAL_CAMERA_POSITION);
-camera.lookAt(0, 0, 0);
+camera.lookAt(0, 45, 0);
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
@@ -60,7 +60,14 @@ document.body.appendChild(uiContainer);
 
 // Initialize camera controller with initial position
 const cameraController = new CameraController(camera, renderer.domElement, INITIAL_CAMERA_POSITION);
-
+// Prevent spacebar from resetting camera
+window.addEventListener('keydown', function(e) {
+    // If the key pressed is spacebar (keyCode 32)
+    if (e.code === 'Space') {
+        // Prevent the default action
+        e.preventDefault();
+    }
+});
 // Add ambient and directional light for better visibility
 const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
 scene.add(ambientLight);
