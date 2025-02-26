@@ -436,9 +436,6 @@ export class TreePointCloud {
             }
         });
         
-        // Rotate hover frame slightly if visible
-        if (this.hoverFrame && this.hoverFrame.visible) {
-            this.hoverFrame.rotation.z += 0.005;
+        
         }
     }
-}
