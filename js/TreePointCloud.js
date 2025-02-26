@@ -409,20 +409,7 @@ export class TreePointCloud {
     }
 
     animate() {
-        // Simple animation for the tree points (exclude interactive points)
-        this.points.children.forEach((points, i) => {
-            // Skip the interactive points and hover frame
-            if (points.name === "interactivePoints" || points === this.hoverFrame) return;
-            
-            if (points.geometry && points.geometry.attributes && points.geometry.attributes.position) {
-                const positions = points.geometry.attributes.position.array;
-                for (let j = 0; j < positions.length; j += 3) {
-                    positions[j] += Math.sin(Date.now() * 0.001 + i) * 0.001;
-                    positions[j + 2] += Math.cos(Date.now() * 0.001 + i) * 0.001;
-                }
-                points.geometry.attributes.position.needsUpdate = true;
-            }
-        });
+        // Only animate the interactive points - no tree sway animation
         
         // Pulse animation for interactive points
         this.points.traverse(child => {
@@ -434,6 +421,9 @@ export class TreePointCloud {
             }
         });
         
-        
+        // Rotate hover frame slightly if visible
+        if (this.hoverFrame && this.hoverFrame.visible) {
+            this.hoverFrame.rotation.z += 0.005;
         }
+    }
     }

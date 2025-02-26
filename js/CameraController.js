@@ -1,9 +1,13 @@
 import * as THREE from 'three';
 
 class CameraController {
-    constructor(camera, domElement) {
+    constructor(camera, domElement, initialPosition = new THREE.Vector3(0, 10, 20)) {
         this.camera = camera;
         this.domElement = domElement;
+        
+        // Store initial position for reset functionality
+        this.initialPosition = initialPosition.clone();
+        this.initialTarget = new THREE.Vector3(0, 0, 0);
         
         // Camera properties
         this.target = new THREE.Vector3(0, 0, 0);
@@ -45,7 +49,7 @@ class CameraController {
     }
     
     updateSpherical() {
-        this.spherical.setFromVector3(this.currentPosition.sub(this.target));
+        this.spherical.setFromVector3(this.currentPosition.clone().sub(this.target));
     }
     
     setupEventListeners() {
@@ -169,6 +173,28 @@ class CameraController {
         if (this.keys.KeyE) {
             this.spherical.theta -= 0.02;
         }
+    }
+    
+    // Add reset method
+    reset() {
+        // Reset camera position and target to initial values
+        this.camera.position.copy(this.initialPosition);
+        this.target.copy(this.initialTarget);
+        this.currentPosition.copy(this.initialPosition);
+        
+        // Update spherical coordinates
+        this.updateSpherical();
+        
+        // Reset camera orientation
+        this.camera.lookAt(this.target);
+        
+        console.log("Camera reset to position:", this.initialPosition);
+    }
+    
+    // Set a new initial position (useful when changing default position)
+    setInitialPosition(position, target = new THREE.Vector3(0, 0, 0)) {
+        this.initialPosition.copy(position);
+        this.initialTarget.copy(target);
     }
     
     dispose() {

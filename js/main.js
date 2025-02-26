@@ -1,24 +1,65 @@
 import * as THREE from 'three';
 import { TreePointCloud } from './TreePointCloud.js';
 import { CameraController } from './CameraController.js';
+import { LoadingAnimation } from './loading.js';
 
-// Create scene
+// Initialize loading animation
+const loadingAnimation = new LoadingAnimation();
+loadingAnimation.init();
+
+// Create scene but don't display it yet
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x111111); // Slightly lighter background to see if rendering works
+scene.background = new THREE.Color(0x111111);
 
 // Camera and renderer setup
 const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+
+// Set a further initial camera position
+const INITIAL_CAMERA_POSITION = new THREE.Vector3(0, 45, 80);
+camera.position.copy(INITIAL_CAMERA_POSITION);
+camera.lookAt(0, 0, 0);
+
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
-document.body.appendChild(renderer.domElement);
 
-// Add axes helper for debugging
-const axesHelper = new THREE.AxesHelper(5);
-scene.add(axesHelper);
+// Create a container for the 3D scene that starts invisible
+const sceneContainer = document.createElement('div');
+sceneContainer.id = 'scene-container';
+sceneContainer.style.opacity = '0';
+sceneContainer.style.transition = 'opacity 1s ease-in';
+sceneContainer.appendChild(renderer.domElement);
+document.body.appendChild(sceneContainer);
 
-// Add grid helper for reference
-const gridHelper = new THREE.GridHelper(10, 10);
-scene.add(gridHelper);
+// Add UI container on top of the scene
+const uiContainer = document.createElement('div');
+uiContainer.id = 'ui-container';
+uiContainer.style.cssText = `
+    position: fixed;
+    top: 10px;
+    right: 10px;
+    z-index: 100;
+    opacity: 0;
+    transition: opacity 1.5s ease-in;
+`;
+
+// Add reset camera button
+const resetButton = document.createElement('button');
+resetButton.id = 'resetCamera';
+resetButton.textContent = 'Reset Camera';
+resetButton.style.cssText = `
+    padding: 8px 12px;
+    margin: 5px;
+    background: #333;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+`;
+uiContainer.appendChild(resetButton);
+document.body.appendChild(uiContainer);
+
+// Initialize camera controller with initial position
+const cameraController = new CameraController(camera, renderer.domElement, INITIAL_CAMERA_POSITION);
 
 // Add ambient and directional light for better visibility
 const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
@@ -28,22 +69,7 @@ const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
 directionalLight.position.set(5, 10, 7.5);
 scene.add(directionalLight);
 
-// Camera positioning
-camera.position.set(0, 5, 10);
-camera.lookAt(0, 0, 0);
-
-// Initialize camera controller
-const cameraController = new CameraController(camera, renderer.domElement);
-
-// Add a simple sphere as a reference point to make sure rendering works
-const sphere = new THREE.Mesh(
-    new THREE.SphereGeometry(0.5, 16, 16),
-    new THREE.MeshBasicMaterial({ color: 0xff0000 })
-);
-sphere.position.set(0, 0, 0);
-scene.add(sphere);
-
-// Create tree point cloud with interactive points
+// Create tree point cloud with custom point positions
 const tree = new TreePointCloud({
     height: 5,
     radiusBase: 0.5,
@@ -52,84 +78,29 @@ const tree = new TreePointCloud({
     colorVariation: 0.3,
     baseColor: 0x2E8B57,
     modelPath: 'models/tree.obj', 
-    pointSize: 0.15, // Larger size for better visibility
-    // Define exact positions for each interactive point
+    pointSize: 0.15,
     customPointPositions: [
-        { x: 2.0, y: 4.5, z: 0.0 },    // Point 1
-        { x: -1.8, y: 3.2, z: 1.5 },   // Point 2
-        { x: 0.5, y: 5.5, z: -1.0 },   // Point 3
-        { x: 1.2, y: 2.8, z: 2.2 },    // Point 4
-        { x: -1.0, y: 4.0, z: -2.0 }   // Point 5
+        { x: -2.0, y: 34.5, z: 0.0 },    // Point 1
+        { x: -1.8, y: 23.2, z: 1.5 },   // Point 2
+        { x: 0.5, y: 35.5, z: -1.0 },   // Point 3
+        { x: 1.2, y: 22.8, z: 2.2 },    // Point 4
+        { x: 1.0, y: 14.0, z: 0 }   // Point 5
     ]
 });
 
-// Add event listener to log when tree model loads
-const originalLoadMethod = tree.loadTreeModel;
-tree.loadTreeModel = function() {
-    console.log("Starting to load tree model...");
-    return originalLoadMethod.apply(this, arguments);
-};
-
 scene.add(tree.points);
 
-// Debug info
-console.log("Scene children count:", scene.children.length);
-console.log("Tree points added to scene:", tree.points);
+// Set callback to fade in the scene when loading completes
+loadingAnimation.setOnComplete(() => {
+    // Fade in the scene and UI
+    sceneContainer.style.opacity = '1';
+    uiContainer.style.opacity = '1';
+});
 
 // Reset camera button functionality
-document.getElementById('resetCamera').addEventListener('click', () => {
-    camera.position.set(0, 5, 10);
-    camera.lookAt(0, 0, 0);
-    if (cameraController.reset) {
-        cameraController.reset();
-    }
+resetButton.addEventListener('click', () => {
+    cameraController.reset();
 });
-
-// Add info button to toggle helpful information about interactive points
-const infoButton = document.createElement('button');
-infoButton.id = 'infoButton';
-infoButton.textContent = 'Show Interactive Points Info';
-infoButton.addEventListener('click', toggleInfoPanel);
-document.getElementById('ui-container').appendChild(infoButton);
-
-// Create info panel
-const infoPanel = document.createElement('div');
-infoPanel.id = 'info-panel';
-infoPanel.style = `
-    position: fixed;
-    bottom: 20px;
-    left: 20px;
-    background: rgba(0, 0, 0, 0.7);
-    color: white;
-    padding: 15px;
-    border-radius: 5px;
-    max-width: 300px;
-    display: none;
-    z-index: 100;
-`;
-infoPanel.innerHTML = `
-    <h3>Interactive Tree Points</h3>
-    <p>Green points: Potential interaction points (${tree.params.potentialPointsCount})</p>
-    <p>Red points: Activated points (${tree.params.activatedPointsCount}) - click to navigate</p>
-    <p>Hover over any red point to see interaction frame.</p>
-    <button id="close-info">Close</button>
-`;
-document.body.appendChild(infoPanel);
-
-// Close button for info panel
-document.getElementById('close-info').addEventListener('click', () => {
-    infoPanel.style.display = 'none';
-});
-
-function toggleInfoPanel() {
-    if (infoPanel.style.display === 'none') {
-        infoPanel.style.display = 'block';
-        infoButton.textContent = 'Hide Interactive Points Info';
-    } else {
-        infoPanel.style.display = 'none';
-        infoButton.textContent = 'Show Interactive Points Info';
-    }
-}
 
 // Animation loop
 function animate() {
@@ -140,11 +111,6 @@ function animate() {
         // Call update method which handles both animation and interaction
         tree.update(camera);
     }
-    
-    // Make the sphere pulsate slightly to check if animation is running
-    sphere.scale.x = 1 + 0.1 * Math.sin(Date.now() * 0.001);
-    sphere.scale.y = 1 + 0.1 * Math.sin(Date.now() * 0.001);
-    sphere.scale.z = 1 + 0.1 * Math.sin(Date.now() * 0.001);
     
     cameraController.update();
     renderer.render(scene, camera);
