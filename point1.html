@@ -4,38 +4,104 @@
     <title>Interactive Point 1</title>
     <style>
         body {
-            font-family: Arial, sans-serif;
             margin: 0;
-            padding: 20px;
-            background-color: #f0f0f0;
+            padding: 0;
+            font-family: 'Segoe UI', 'Arial', sans-serif;
+            background-color: #ffffff;
+            overflow: hidden;
         }
-        .container {
-            max-width: 800px;
-            margin: 0 auto;
-            background-color: white;
-            padding: 20px;
-            border-radius: 5px;
-            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        
+        .frame-container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
-        h1 {
-            color: #FF0000;
+        
+        .video-border {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 400px;
+            height: 200px;
+            border: 2px solid #333;
+            background-color: rgba(245, 245, 245, 0.9);
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.2);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1;
         }
-        .back-button {
-            background-color: #333;
-            color: white;
-            border: none;
-            padding: 10px 15px;
-            border-radius: 4px;
-            cursor: pointer;
-            margin-top: 20px;
+        
+        .video-container {
+            width: 90%;
+            height: 90%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            border: 1px solid #ccc;
+            background-color: #000;
+        }
+        
+        video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        
+        #rain-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 2;
+        }
+        
+        #factory-container {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            width: 400px;
+            height: 300px;
+            z-index: 1;
+        }
+        
+        #forest-container {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            width: calc(100% - 450px);
+            height: 200px;
+            z-index: 1;
         }
     </style>
 </head>
 <body>
-    <div class="container">
-        <h1>Point 1 Content</h1>
-        <p>This is the content for interactive point 1. You can add any information you want here.</p>
-        <button class="back-button" onclick="window.close()">Return to Tree View</button>
+    <div class="frame-container">
+        <div class="video-border">
+            <div class="video-container">
+                <video id="main-video" controls>
+                    <source src="videos/point1.mp4" type="video/mp4">
+                    Your browser does not support the video tag.
+                </video>
+            </div>
+        </div>
+        
+        <div id="factory-container"></div>
+        <div id="forest-container"></div>
+        <canvas id="rain-canvas"></canvas>
     </div>
+    
+    <!-- Load script files -->
+    <script src="js4points/factory.js"></script>
+    <script src="js4points/forest.js"></script>
+    <script src="js4points/rain.js"></script>
+    <script src="js4points/bulldozer.js"></script>
 </body>
 </html>
