@@ -21,7 +21,6 @@ class CameraController {
     this.moveSpeed = 0.125
     this.rotateSpeed = 0.002
     this.dragSpeed = 0.25
-    this.panSpeed = 0.01
     this.verticalSpeed = 0.125 // Speed for up/down movement
 
     // Zoom limits
@@ -94,9 +93,12 @@ class CameraController {
     // If another button is already pressed, ignore new button presses
     if (this.isMouseDown) return
 
-    this.isMouseDown = true
-    this.mouseButton = event.button
-    this.mousePosition.set(event.clientX, event.clientY)
+    // Only track left click (0) or middle click (1), ignore right click (2)
+    if (event.button === 0 || event.button === 1) {
+      this.isMouseDown = true
+      this.mouseButton = event.button
+      this.mousePosition.set(event.clientX, event.clientY)
+    }
   }
 
   onMouseMove(event) {
@@ -124,26 +126,8 @@ class CameraController {
 
       // Update camera direction based on pitch and yaw
       this.updateCameraDirection()
-    } else if (this.mouseButton === 2) {
-      // Right click - Pan
-      // Get distance to target for scaling
-      const distanceToTarget = this.currentPosition.distanceTo(this.target)
-      const panScale = Math.max(0.01, distanceToTarget * 0.0005)
-
-      // Get right and up vectors from camera
-      const right = new THREE.Vector3()
-      const up = new THREE.Vector3(0, 1, 0)
-      right.crossVectors(this.camera.up, this.camera.getWorldDirection(new THREE.Vector3()))
-      right.normalize()
-
-      // Calculate movement vectors with scaled pan amount - INVERTED
-      const moveRight = right.clone().multiplyScalar(delta.x * panScale)
-      const moveUp = up.clone().multiplyScalar(-delta.y * panScale)
-
-      // Apply movement
-      this.currentPosition.add(moveRight).add(moveUp)
-      this.target.add(moveRight).add(moveUp)
     }
+    // Right click functionality removed - does nothing now
   }
 
   updateCameraDirection() {
@@ -299,11 +283,6 @@ class CameraController {
   setInitialPosition(position, target = new THREE.Vector3(0, 0, 0)) {
     this.initialPosition.copy(position)
     this.initialTarget.copy(target)
-  }
-
-  // Set the panning speed
-  setPanSpeed(speed) {
-    this.panSpeed = speed
   }
 
   dispose() {
