@@ -11,22 +11,22 @@ class CameraController {
 
     // Camera properties
     this.currentPosition = new THREE.Vector3()
+    this.target = new THREE.Vector3()
 
     // First-person camera properties
     this.pitch = 0 // Up/down rotation (in radians)
     this.yaw = 0 // Left/right rotation (in radians)
-    this.distance = 20 // Distance from camera to look-at point
 
     // Movement settings
-    this.moveSpeed = 0.25
-    this.rotateSpeed = 0.002 // Reduced for smoother rotation
+    this.moveSpeed = 0.125
+    this.rotateSpeed = 0.002
     this.dragSpeed = 0.25
-    this.panSpeed = 0.01 // Pan speed for right-click drag
-    this.zoomSpeed = 2.0 // Speed for zoom
+    this.panSpeed = 0.01
+    this.verticalSpeed = 0.125 // Speed for up/down movement
 
     // Zoom limits
-    this.minDistance = 5 // Minimum zoom distance
-    this.maxDistance = 200 // Maximum zoom distance
+    this.minDistance = 5
+    this.maxDistance = 200
 
     // Mouse state
     this.isMouseDown = false
@@ -48,13 +48,12 @@ class CameraController {
 
     // Set initial camera position and calculate target
     this.currentPosition.copy(this.camera.position)
-    this.distance = this.initialPosition.length()
 
     // Calculate initial pitch and yaw from camera position
     this.calculateInitialRotation()
 
-    // Calculate initial target based on direction
-    this.target = this.calculateTarget()
+    // Calculate initial target
+    this.updateCameraDirection()
 
     this.setupEventListeners()
   }
@@ -69,17 +68,6 @@ class CameraController {
     // Calculate initial pitch (vertical rotation)
     const horizontalDistance = Math.sqrt(direction.x * direction.x + direction.z * direction.z)
     this.pitch = Math.atan2(direction.y, horizontalDistance)
-  }
-
-  calculateTarget() {
-    // Calculate the look direction based on pitch and yaw
-    const direction = new THREE.Vector3()
-    direction.x = Math.sin(this.yaw) * Math.cos(this.pitch)
-    direction.y = Math.sin(this.pitch)
-    direction.z = Math.cos(this.yaw) * Math.cos(this.pitch)
-
-    // Calculate target position based on camera position and direction
-    return this.currentPosition.clone().add(direction.multiplyScalar(this.distance))
   }
 
   setupEventListeners() {
@@ -138,8 +126,9 @@ class CameraController {
       this.updateCameraDirection()
     } else if (this.mouseButton === 2) {
       // Right click - Pan
-      // Scale pan amount by distance to target for consistent speed
-      const panScale = Math.max(0.01, this.distance * 0.0005)
+      // Get distance to target for scaling
+      const distanceToTarget = this.currentPosition.distanceTo(this.target)
+      const panScale = Math.max(0.01, distanceToTarget * 0.0005)
 
       // Get right and up vectors from camera
       const right = new THREE.Vector3()
@@ -153,15 +142,22 @@ class CameraController {
 
       // Apply movement
       this.currentPosition.add(moveRight).add(moveUp)
-
-      // Update target based on new position and current direction
-      this.target = this.calculateTarget()
+      this.target.add(moveRight).add(moveUp)
     }
   }
 
   updateCameraDirection() {
-    // Update the target based on the new direction
-    this.target = this.calculateTarget()
+    // Calculate the new look direction based on pitch and yaw
+    const direction = new THREE.Vector3()
+    direction.x = Math.sin(this.yaw) * Math.cos(this.pitch)
+    direction.y = Math.sin(this.pitch)
+    direction.z = Math.cos(this.yaw) * Math.cos(this.pitch)
+
+    // Get current distance to target
+    const distanceToTarget = this.currentPosition.distanceTo(this.target)
+
+    // Update the target position based on the camera position and direction
+    this.target.copy(this.currentPosition).add(direction.multiplyScalar(distanceToTarget))
 
     // Update the camera to look at the target
     this.camera.lookAt(this.target)
@@ -178,24 +174,22 @@ class CameraController {
   onMouseWheel(event) {
     event.preventDefault()
 
-    // Determine zoom direction (in or out)
-    const zoomDirection = event.deltaY > 0 ? -1 : 1
+    // Simple fixed zoom rate - INVERTED (negative becomes positive and vice versa)
+    const zoomStep = event.deltaY > 0 ? -2.0 : 2.0
 
-    // Calculate new distance with the zoom speed
-    const newDistance = this.distance + zoomDirection * -this.zoomSpeed
+    // Get direction from camera to target
+    const directionToTarget = new THREE.Vector3().subVectors(this.target, this.currentPosition).normalize()
+
+    // Move camera along the view direction
+    const newPosition = this.currentPosition.clone().addScaledVector(directionToTarget, zoomStep)
+
+    // Calculate new distance
+    const newDistance = newPosition.distanceTo(this.target)
 
     // Apply zoom only if within limits
     if (newDistance >= this.minDistance && newDistance <= this.maxDistance) {
-      this.distance = newDistance
-
-      // Get direction from camera to target
-      const direction = new THREE.Vector3()
-      direction.x = Math.sin(this.yaw) * Math.cos(this.pitch)
-      direction.y = Math.sin(this.pitch)
-      direction.z = Math.cos(this.yaw) * Math.cos(this.pitch)
-
-      // Update target based on new distance
-      this.target = this.currentPosition.clone().add(direction.multiplyScalar(this.distance))
+      this.currentPosition.copy(newPosition)
+      this.camera.position.copy(this.currentPosition)
     }
   }
 
@@ -212,17 +206,15 @@ class CameraController {
   }
 
   update() {
-    // Handle keyboard movement
+    // Handle WASD movement (relative to camera orientation)
     const movement = new THREE.Vector3()
 
     if (this.keys.KeyW) movement.z -= this.moveSpeed
     if (this.keys.KeyS) movement.z += this.moveSpeed
     if (this.keys.KeyA) movement.x -= this.moveSpeed
     if (this.keys.KeyD) movement.x += this.moveSpeed
-    if (this.keys.Space) movement.y += this.moveSpeed
-    if (this.keys.ShiftLeft) movement.y -= this.moveSpeed
 
-    // Apply movement in camera's local space
+    // Apply WASD movement in camera's local space
     if (movement.lengthSq() > 0) {
       // Create a quaternion based on the camera's current rotation
       const quaternion = new THREE.Quaternion()
@@ -233,23 +225,37 @@ class CameraController {
 
       // Apply the movement to the camera position
       this.currentPosition.add(movement)
+      this.target.add(movement)
+    }
 
-      // Update the target based on the new position
-      this.target = this.calculateTarget()
+    // Handle Space/Shift for global Y-axis movement (independent of camera orientation)
+    const verticalMovement = new THREE.Vector3(0, 0, 0)
+
+    if (this.keys.Space) verticalMovement.y += this.verticalSpeed
+    if (this.keys.ShiftLeft) verticalMovement.y -= this.verticalSpeed
+
+    // Apply vertical movement directly (global Y-axis)
+    if (verticalMovement.lengthSq() > 0) {
+      this.currentPosition.add(verticalMovement)
+      this.target.add(verticalMovement)
+    }
+
+    // Update camera position if any movement occurred
+    if (movement.lengthSq() > 0 || verticalMovement.lengthSq() > 0) {
+      this.camera.position.copy(this.currentPosition)
     }
 
     // Handle Q/E rotation around Y axis
     if (this.keys.KeyQ) {
-      this.yaw += 0.02
+      this.yaw += 0.01
       this.updateCameraDirection()
     }
     if (this.keys.KeyE) {
-      this.yaw -= 0.02
+      this.yaw -= 0.01
       this.updateCameraDirection()
     }
 
-    // Update camera position
-    this.camera.position.copy(this.currentPosition)
+    // Ensure camera is looking at target
     this.camera.lookAt(this.target)
   }
 
@@ -258,28 +264,33 @@ class CameraController {
     this.minDistance = min
     this.maxDistance = max
 
-    // Enforce limits on current distance if needed
-    this.distance = THREE.MathUtils.clamp(this.distance, min, max)
-
-    // Update target based on new distance constraints
-    this.target = this.calculateTarget()
+    // Enforce limits on current position if needed
+    const currentDist = this.currentPosition.distanceTo(this.target)
+    if (currentDist < min) {
+      // Too close, move back
+      const dir = new THREE.Vector3().subVectors(this.currentPosition, this.target).normalize()
+      this.currentPosition.copy(this.target).add(dir.multiplyScalar(min))
+      this.camera.position.copy(this.currentPosition)
+    } else if (currentDist > max) {
+      // Too far, move closer
+      const dir = new THREE.Vector3().subVectors(this.currentPosition, this.target).normalize()
+      this.currentPosition.copy(this.target).add(dir.multiplyScalar(max))
+      this.camera.position.copy(this.currentPosition)
+    }
   }
 
   // Add reset method
   reset() {
-    // Reset camera position to initial values
+    // Reset camera position and target to initial values
     this.camera.position.copy(this.initialPosition)
     this.currentPosition.copy(this.initialPosition)
-    this.distance = this.initialPosition.length()
+    this.target.copy(this.initialTarget)
 
     // Reset rotation values
     this.calculateInitialRotation()
 
-    // Update target based on reset position and rotation
-    this.target = this.calculateTarget()
-
-    // Update camera
-    this.camera.lookAt(this.target)
+    // Update camera direction based on reset pitch and yaw
+    this.updateCameraDirection()
 
     console.log("Camera reset to position:", this.initialPosition)
   }
