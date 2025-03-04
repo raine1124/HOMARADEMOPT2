@@ -3,10 +3,14 @@ import { TreePointCloud } from './TreePointCloud.js';
 import { CameraController } from './CameraController.js';
 import { LoadingAnimation } from './loading.js';
 import { Environment } from './Environment.js';
+import { ControlsOverlay } from './controls-overlay.js'; // Import the controls overlay
 
 // Initialize loading animation
 const loadingAnimation = new LoadingAnimation();
 loadingAnimation.init();
+
+// Create controls overlay
+const controlsOverlay = new ControlsOverlay();
 
 // Create scene but don't display it yet
 const scene = new THREE.Scene();
@@ -104,6 +108,11 @@ loadingAnimation.setOnComplete(() => {
     // Fade in the scene and UI
     sceneContainer.style.opacity = '1';
     uiContainer.style.opacity = '1';
+    
+    // Show controls overlay after the scene fades in
+    setTimeout(() => {
+        controlsOverlay.show(3000); // Show for 3 seconds
+    }, 500); // Slight delay after scene appears
 });
 
 // Reset camera button functionality
