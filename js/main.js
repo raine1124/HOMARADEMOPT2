@@ -120,7 +120,7 @@ resetButton.addEventListener('click', () => {
     cameraController.reset();
 });
 
-// Add day/night cycle button
+// Day/night toggle button (can be hidden since we removed the functionality)
 const cycleButton = document.createElement('button');
 cycleButton.id = 'cycleDayNight';
 cycleButton.textContent = 'Toggle Day/Night';
@@ -132,26 +132,9 @@ cycleButton.style.cssText = `
     border: none;
     border-radius: 4px;
     cursor: pointer;
+    display: none; /* Hide the button since the functionality is removed */
 `;
 uiContainer.appendChild(cycleButton);
-
-// Day/night state
-let isDayTime = true;
-
-// Day/night toggle functionality
-cycleButton.addEventListener('click', () => {
-    isDayTime = !isDayTime;
-    
-    if (isDayTime) {
-        // Switch to daytime
-        scene.background = new THREE.Color(0x111111);
-        environment.setDayTime();
-    } else {
-        // Switch to nighttime
-        scene.background = new THREE.Color(0x000022);
-        environment.setNightTime();
-    }
-});
 
 // Animation loop
 function animate() {
@@ -163,8 +146,7 @@ function animate() {
         tree.update(camera);
     }
     
-    // Update environment effects
-    environment.update();
+    // Environment update removed
     
     cameraController.update();
     renderer.render(scene, camera);
